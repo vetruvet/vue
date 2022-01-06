@@ -13,45 +13,39 @@ export type AsyncFileMapper = (files: Array<string>) => Array<string>;
 export function createMapper (
   clientManifest: ClientManifest
 ): AsyncFileMapper {
-  const map = createMap(clientManifest)
   // map server-side moduleIds to client-side files
   return function mapper (moduleIds: Array<string>): Array<string> {
-    const res = new Set()
-    for (let i = 0; i < moduleIds.length; i++) {
-      const mapped = map.get(moduleIds[i])
-      if (mapped) {
-        for (let j = 0; j < mapped.length; j++) {
-          res.add(mapped[j])
-        }
-      }
-    }
-    return Array.from(res)
-  }
-}
+    const chunks = new Set();
 
-function createMap (clientManifest) {
-  const map = new Map()
-  Object.keys(clientManifest.modules).forEach(id => {
-    map.set(id, mapIdToFile(id, clientManifest))
-  })
-  return map
-}
-
-function mapIdToFile (id, clientManifest) {
-  const files = []
-  const fileIndices = clientManifest.modules[id]
-  if (fileIndices) {
-    fileIndices.forEach(index => {
-      const file = clientManifest.all[index]
-      // only include async files or non-js, non-css assets
-      if (
-        file &&
-        (clientManifest.async.indexOf(file) > -1 ||
-          !/\.(js|css)($|\?)/.test(file))
-      ) {
-        files.push(file)
+    moduleIds.forEach(mid => {
+      if (clientManifest.moduleChunk[mid]) {
+        chunks.add(clientManifest.moduleChunk[mid])
       }
     })
+
+    let chunkSiblingsToCheck = Array.from(chunks);
+    while (chunkSiblingsToCheck.length) {
+      const chunk = chunkSiblingsToCheck.shift();
+      const siblings = clientManifest.chunkSiblings[chunk];
+      if (siblings) {
+        siblings.forEach(sid => {
+          chunks.add(sid);
+        });
+        chunkSiblingsToCheck = chunkSiblingsToCheck.filter(cid => !siblings.includes(cid));
+      }
+    }
+
+    const files = new Set();
+    Array.from(chunks).forEach(cid => {
+      const chunkFiles = clientManifest.chunkFiles[cid];
+      if (chunkFiles) {
+        chunkFiles.forEach(file => {
+          files.add(file);
+        });
+      }
+    });
+
+    return Array.from(files);
   }
-  return files
 }
+

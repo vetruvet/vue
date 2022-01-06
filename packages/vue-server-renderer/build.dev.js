@@ -43,7 +43,7 @@ function isPrimitive (value) {
 
 /**
  * Quick object check - this is primarily used to tell
- * Objects from primitive values when we know the value
+ * objects from primitive values when we know the value
  * is a JSON-compliant type.
  */
 function isObject (obj) {
@@ -3053,7 +3053,7 @@ function transformNode (el, options) {
     }
   }
   if (staticClass) {
-    el.staticClass = JSON.stringify(staticClass);
+    el.staticClass = JSON.stringify(staticClass.replace(/\s+/g, ' ').trim());
   }
   var classBinding = getBindingAttr(el, 'class', false /* getStatic */);
   if (classBinding) {
@@ -8846,47 +8846,42 @@ function parseTemplate (
 function createMapper (
   clientManifest
 ) {
-  var map = createMap(clientManifest);
   // map server-side moduleIds to client-side files
   return function mapper (moduleIds) {
-    var res = new Set();
-    for (var i = 0; i < moduleIds.length; i++) {
-      var mapped = map.get(moduleIds[i]);
-      if (mapped) {
-        for (var j = 0; j < mapped.length; j++) {
-          res.add(mapped[j]);
-        }
-      }
-    }
-    return Array.from(res)
-  }
-}
+    var chunks = new Set();
 
-function createMap (clientManifest) {
-  var map = new Map();
-  Object.keys(clientManifest.modules).forEach(function (id) {
-    map.set(id, mapIdToFile(id, clientManifest));
-  });
-  return map
-}
-
-function mapIdToFile (id, clientManifest) {
-  var files = [];
-  var fileIndices = clientManifest.modules[id];
-  if (fileIndices) {
-    fileIndices.forEach(function (index) {
-      var file = clientManifest.all[index];
-      // only include async files or non-js, non-css assets
-      if (
-        file &&
-        (clientManifest.async.indexOf(file) > -1 ||
-          !/\.(js|css)($|\?)/.test(file))
-      ) {
-        files.push(file);
+    moduleIds.forEach(function (mid) {
+      if (clientManifest.moduleChunk[mid]) {
+        chunks.add(clientManifest.moduleChunk[mid]);
       }
     });
+
+    var chunkSiblingsToCheck = Array.from(chunks);
+    var loop = function () {
+      var chunk = chunkSiblingsToCheck.shift();
+      var siblings = clientManifest.chunkSiblings[chunk];
+      if (siblings) {
+        siblings.forEach(function (sid) {
+          chunks.add(sid);
+        });
+        chunkSiblingsToCheck = chunkSiblingsToCheck.filter(function (cid) { return !siblings.includes(cid); });
+      }
+    };
+
+    while (chunkSiblingsToCheck.length) loop();
+
+    var files = new Set();
+    Array.from(chunks).forEach(function (cid) {
+      var chunkFiles = clientManifest.chunkFiles[cid];
+      if (chunkFiles) {
+        chunkFiles.forEach(function (file) {
+          files.add(file);
+        });
+      }
+    });
+
+    return Array.from(files);
   }
-  return files
 }
 
 /*  */

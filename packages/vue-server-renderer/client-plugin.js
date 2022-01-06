@@ -88,30 +88,22 @@ VueSSRClientPlugin.prototype.apply = function apply (compiler) {
 
     var manifest = {
       publicPath: stats.publicPath,
-      all: allFiles,
       initial: initialFiles,
       async: asyncFiles,
-      modules: { /* [identifier: string]: Array<index: number> */ }
+      moduleChunk: {},
+      chunkFiles: {},
+      chunkSiblings: {},
     };
 
-    var assetModules = stats.modules.filter(function (m) { return m.assets.length; });
-    var fileToIndex = function (asset) { return manifest.all.indexOf(getAssetName(asset)); };
+    stats.chunks.forEach(function (c) {
+      manifest.chunkFiles[c.id] = c.files;
+      manifest.chunkSiblings[c.id] = c.siblings;
+    });
+
     stats.modules.forEach(function (m) {
-      // ignore modules duplicated in multiple chunks
       if (m.chunks.length === 1) {
-        var cid = m.chunks[0];
-        var chunk = stats.chunks.find(function (c) { return c.id === cid; });
-        if (!chunk || !chunk.files) {
-          return
-        }
         var id = stripModuleIdHash(m.identifier);
-        var files = manifest.modules[hash(id)] = chunk.files.map(fileToIndex);
-        // find all asset modules associated with the same chunk
-        assetModules.forEach(function (m) {
-          if (m.chunks.some(function (id) { return id === cid; })) {
-            files.push.apply(files, m.assets.map(fileToIndex));
-          }
-        });
+        manifest.moduleChunk[hash(id)] = m.chunks[0];
       }
     });
 
